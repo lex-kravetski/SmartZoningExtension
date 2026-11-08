@@ -1,12 +1,16 @@
 # Smart Zoning Extension
 
-The game's **Roads** tool has a **zoning toggle** for choosing which sides of a road can be zoned while building or upgrading it. Smart Zoning Extension brings this control to the standard **Zone** tool and adds previews and priority controls for existing roads.
+The game's **Roads** tool has a **zoning toggle** for choosing which sides of a road can be zoned while building or upgrading it. Smart Zoning Extension brings this control to the standard **Zones Tool** and adds previews and priority controls for existing roads.
 
 This means you no longer have to switch to the Roads tool or use paths to change zoning on existing roads.
 
+
 ## How to use
 
-Select the standard **Zone** tool and hover over a road segment, as you would when using the road zoning toggle. The side closest to the cursor is the side affected by clicks.
+Select the standard **Zones Tool** and hover over a road segment, as you would when using the road zoning toggle. The side closest to the cursor is the side affected by clicks.
+
+Note: All screenshots were taken with the overlay turned off manually. The mod does not disable the colorful overlays that the game automatically displays when you switch to the **Zones Tool**.
+
 
 ### Preview
 
