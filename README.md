@@ -1,43 +1,28 @@
 # Smart Zoning Extension
 
-Smart Zoning Extension adds road-side zoning controls to Cities: Skylines II. It uses the game's built-in road-side zoning state, but lets you work with it directly in the regular **Zone** tool instead of switching to the Roads tool.
+Smart Zoning Extension adds controls for road-side zoning in Cities: Skylines II. The game has a **Zoning Toggle** in the Roads tool for choosing which sides of a road can be zoned while building or upgrading it. This mod brings road-side zoning controls to the standard **Zone** tool and adds previews and priority controls for existing roads.
 
-The equivalent vanilla road-building option is the **zoning toggle**: it controls whether zoning is allowed on both sides of a road, one side, or neither while building or upgrading roads. This mod adds extra controls for existing road segments while the Zone tool is active. [Official patch notes](https://store.steampowered.com/news/posts/?enddate=1773824603&feed=steam_community_announcements)
+## How to use
 
-## Using the mod
+Select the standard **Zone** tool and move the cursor over a road segment. The side nearest the cursor is the side affected by a normal click.
 
-1. Enable **Smart Zoning Extension** in your active playset and load a city.
-2. In **Options → Mods → Smart Zoning Extension**, leave **Enabled** checked. Uncheck it to temporarily turn off all mod features without removing the mod.
-3. Select the game's standard **Zone** tool and move the cursor over a road segment. The side of the road nearest the cursor is the active side for clicks.
+### Preview
 
-### Hover preview
-
-- When zoning is enabled on the hovered side, the game's zoning cells are highlighted. Enabled sides of other roads that compete for those cells are marked red.
-- When zoning is disabled on the hovered side, a blue overlay marks that half of the road and shows where zoning will be enabled by a right-click.
+- Zoning cells on the hovered side are highlighted.
+- Red highlights mark enabled sides of nearby roads whose zoning competes for the hovered area.
+- If zoning is disabled on the hovered side, a blue overlay marks that side of the road and previews where zoning will be restored.
 - The preview is hidden while a mouse button is held, so it does not interfere with painting or erasing zones.
 
-### Mouse controls
+### Controls
 
-| Input | Effect |
-| --- | --- |
-| Left-click a road | Disable zoning on the side nearest the cursor. |
-| Right-click a road | Enable zoning on the side nearest the cursor. |
-| **Alt** + left-click | Disable zoning on the enabled sides of competing roads. The hovered side is left unchanged. |
-| **Alt** + right-click | Enable zoning on competing road sides, including sides that are currently disabled. |
-| Middle-click a road | Rebalance zoning priority for the enabled competing sides. The mod temporarily disables them, then restores them from the least-overlapping side to the most-overlapping side. This gives the hovered side a chance to claim more of the shared area. |
+- **Left-click** a road to disable zoning on the side nearest the cursor.
+- **Right-click** a road to enable zoning on the side nearest the cursor.
+- **Alt + left-click** a road to disable zoning on its enabled competitors highlighted in red. The hovered side is left unchanged.
+- **Alt + right-click** a road to enable zoning on competing sides, including sides that are currently disabled.
+- **Middle-click** a road to rebalance priority among enabled competing sides. The mod temporarily disables those sides, then restores them from the least-overlapping to the most-overlapping. This gives the hovered side the opportunity to claim more of the shared area.
 
-The red preview and Alt-click actions use the same competition check, so the highlighted road sides correspond to the sides the Alt-click will affect. The middle-click considers enabled competitors only.
+The red preview and Alt-clicks use the same competition check. Middle-click only processes competitors that are enabled when clicked.
 
-## Build and install locally
+## Mod setting
 
-The project uses the Cities: Skylines II modding toolchain. From the repository root, run:
-
-```powershell
-dotnet build .\ZoneDepth\ZoneDepth.csproj -c Release
-```
-
-The toolchain post-processes and deploys the mod to:
-
-```text
-%USERPROFILE%\AppData\LocalLow\Colossal Order\Cities Skylines II\Mods\ZoneDepth
-```
+In **Options → Mods → Smart Zoning Extension**, the **Enabled** option turns all mod features on or off. It is on by default. Uncheck it to temporarily disable the mod without removing it from your playset.
