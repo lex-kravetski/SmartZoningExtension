@@ -165,7 +165,8 @@ namespace ZoneDepth
             if (m_GetRaycastResult == null || m_ApplyZoneField == null || m_RemoveZoneField == null)
                 return;
 
-            bool hasRoad = TryGetRoadUnderCursor(out Entity hoveredRoad, out float3 hitPosition);
+            bool hasRoad = TryGetRoadUnderCursor(out Entity hoveredRoad, out float3 hitPosition,
+                ignoreZoneCellHit: true);
             m_HoveredRoad = hasRoad ? hoveredRoad : Entity.Null;
             bool mouseHeld = Mouse.current != null &&
                 (Mouse.current.leftButton.isPressed ||
@@ -190,7 +191,7 @@ namespace ZoneDepth
             {
                 bool disable = Mouse.current.leftButton.wasPressedThisFrame;
                 bool enable = Mouse.current.rightButton.wasPressedThisFrame;
-                if ((disable || enable) && hasRoad)
+                if (disable || enable)
                     ProcessDirectClick(disable);
                 if (Mouse.current.middleButton.wasPressedThisFrame && hasRoad)
                 {
@@ -475,7 +476,8 @@ namespace ZoneDepth
             return matches;
         }
 
-        private bool TryGetRoadUnderCursor(out Entity road, out float3 hitPosition)
+        private bool TryGetRoadUnderCursor(out Entity road, out float3 hitPosition,
+            bool ignoreZoneCellHit = false)
         {
             road = Entity.Null;
             hitPosition = default;
@@ -488,20 +490,37 @@ namespace ZoneDepth
                 return false;
 
             EntityManager entityManager = World.EntityManager;
+            if (ignoreZoneCellHit &&
+                (IsZoneCellHit(entityManager, result, raycast) ||
+                 IsZoneCellHit(entityManager, raycast.m_HitEntity, raycast)))
+                return false;
+
             if (result != Entity.Null && entityManager.Exists(result) && entityManager.HasComponent<Curve>(result))
                 road = result;
             else if (raycast.m_HitEntity != Entity.Null && entityManager.Exists(raycast.m_HitEntity) && entityManager.HasComponent<Curve>(raycast.m_HitEntity))
                 road = raycast.m_HitEntity;
-            else
+
+            // ZoneTool can keep returning a road entity while the pointer is
+            // over adjacent zoning cells. Preserve the road raycast, but only
+            // treat the result as a hover when the hit point is on that road.
+            if (road != Entity.Null && !IsHitInsideRoad(road, hitPosition))
+                road = Entity.Null;
+            if (road == Entity.Null)
                 road = FindRoadAtHitPosition(hitPosition);
 
             return road != Entity.Null;
         }
 
+        private static bool IsZoneCellHit(EntityManager entityManager, Entity entity, RaycastHit hit)
+        {
+            return entity != Entity.Null && entityManager.Exists(entity) &&
+                entityManager.HasComponent<Block>(entity) &&
+                hit.m_CellIndex.x >= 0 && hit.m_CellIndex.y >= 0;
+        }
+
         private Entity FindRoadAtHitPosition(float3 hitPosition)
         {
-            Entity nearestRoad = Entity.Null;
-            float nearestDistance = float.MaxValue;
+            Entity roadUnderCursor = Entity.Null;
             NativeArray<Entity> roads = m_RoadEdges.ToEntityArray(Allocator.Temp);
             EntityManager entityManager = World.EntityManager;
             try
@@ -509,29 +528,39 @@ namespace ZoneDepth
                 for (int i = 0; i < roads.Length; i++)
                 {
                     Entity candidate = roads[i];
-                    Curve curve = entityManager.GetComponentData<Curve>(candidate);
-                    MathUtils.Distance(curve.m_Bezier.xz, hitPosition.xz, out float t);
-                    t = math.clamp(t, 0f, 1f);
-                    float2 closest = EvaluateCurve(curve, t);
-                    float distance = math.distance(closest, hitPosition.xz);
-                    if (distance >= nearestDistance)
+                    if (!IsHitInsideRoad(candidate, hitPosition))
                         continue;
-                    GetRoadWidth(candidate, out float width, out _);
-                    // The game reports terrain while the pointer is over the
-                    // road in ZoneTool. Accept only hits inside the segment's
-                    // actual half-width, with a small tolerance for raycast
-                    // and curve approximation error.
-                    if (distance > width * 0.5f + 0.25f)
-                        continue;
-                    nearestRoad = candidate;
-                    nearestDistance = distance;
+
+                    // Do not guess at intersections or overlapping road
+                    // surfaces. Without a direct raycast hit, only accept a
+                    // geometrically unique road under the cursor.
+                    if (roadUnderCursor != Entity.Null)
+                        return Entity.Null;
+                    roadUnderCursor = candidate;
                 }
             }
             finally
             {
                 roads.Dispose();
             }
-            return nearestRoad;
+            return roadUnderCursor;
+        }
+
+        private bool IsHitInsideRoad(Entity road, float3 hitPosition)
+        {
+            EntityManager entityManager = World.EntityManager;
+            if (road == Entity.Null || !entityManager.Exists(road) ||
+                !entityManager.HasComponent<Curve>(road))
+                return false;
+
+            Curve curve = entityManager.GetComponentData<Curve>(road);
+            MathUtils.Distance(curve.m_Bezier.xz, hitPosition.xz, out float t);
+            t = math.clamp(t, 0f, 1f);
+            float distance = math.distance(EvaluateCurve(curve, t), hitPosition.xz);
+            GetRoadWidth(road, out float width, out _);
+            // ZoneTool can report terrain for road hits, so allow a small
+            // tolerance around the road's actual half-width.
+            return distance <= width * 0.5f + 0.25f;
         }
 
         private HashSet<Entity> CollectSideBlocks(Entity road, Curve curve, bool left)
@@ -675,7 +704,11 @@ namespace ZoneDepth
         private void ClearHoverPreview()
         {
             Entity oldRoad = m_HoverPreviewRoad;
+            bool oldLeft = m_HoverPreviewLeft;
+            bool oldSideWasEnabled = oldRoad != Entity.Null && !m_HoverPreviewActive;
             EntityManager entityManager = World.EntityManager;
+            if (oldSideWasEnabled)
+                ClearSideCellHighlights(oldRoad, oldLeft);
             if (oldRoad != Entity.Null && entityManager.Exists(oldRoad) &&
                 entityManager.HasComponent<ZoneSidePreview>(oldRoad))
                 entityManager.RemoveComponent<ZoneSidePreview>(oldRoad);
@@ -684,6 +717,41 @@ namespace ZoneDepth
             m_HoverPreviewActive = false;
             m_WorldMarker?.Hide();
             HideCompetitionMarkers();
+        }
+
+        private void ClearSideCellHighlights(Entity road, bool left)
+        {
+            EntityManager entityManager = World.EntityManager;
+            if (!entityManager.Exists(road) || !entityManager.HasComponent<Curve>(road) ||
+                !entityManager.HasBuffer<SubBlock>(road))
+                return;
+
+            Curve curve = entityManager.GetComponentData<Curve>(road);
+            DynamicBuffer<SubBlock> subBlocks = entityManager.GetBuffer<SubBlock>(road, true);
+            for (int i = 0; i < subBlocks.Length; i++)
+            {
+                Entity blockEntity = subBlocks[i].m_SubBlock;
+                if (blockEntity == Entity.Null || !entityManager.Exists(blockEntity) ||
+                    !entityManager.HasComponent<Block>(blockEntity) ||
+                    !entityManager.HasBuffer<Cell>(blockEntity) ||
+                    IsLeftOfRoad(curve, entityManager.GetComponentData<Block>(blockEntity).m_Position) != left)
+                    continue;
+
+                DynamicBuffer<Cell> cells = entityManager.GetBuffer<Cell>(blockEntity);
+                bool changed = false;
+                for (int cellIndex = 0; cellIndex < cells.Length; cellIndex++)
+                {
+                    Cell cell = cells[cellIndex];
+                    if ((cell.m_State & CellFlags.Highlight) == 0)
+                        continue;
+                    cell.m_State &= ~CellFlags.Highlight;
+                    cells[cellIndex] = cell;
+                    changed = true;
+                }
+
+                if (changed)
+                    ToggleUpdated(blockEntity);
+            }
         }
 
         private void UpdateCompetitionMarkers(Entity sourceRoad, bool sourceLeft)
