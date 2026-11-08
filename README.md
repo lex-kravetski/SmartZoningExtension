@@ -7,7 +7,9 @@ This means you no longer have to switch to the Roads tool or use paths to change
 
 ## How to use
 
-Select the standard **Zones Tool** and hover over a road segment, as you would when using the road zoning toggle. The side closest to the cursor is the side affected by clicks.
+Select the standard **Zones Tool**, select a zone to painting and hover over a road segment to disable or enable this segment zoning, as you would when using the road zoning toggle. 
+
+The side closest to the cursor is the side affected by clicks.
 
 Note: All screenshots were taken with the overlay turned off manually. The mod does not disable the colorful overlays that the game automatically displays when you switch to the **Zones Tool**.
 
