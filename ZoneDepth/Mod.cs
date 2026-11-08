@@ -1,4 +1,3 @@
-﻿using Colossal.Logging;
 using Game;
 using Game.Modding;
 using Game.SceneFlow;
@@ -8,7 +7,6 @@ namespace ZoneDepth
 {
     public class Mod : IMod
     {
-        public static ILog log = LogManager.GetLogger($"{nameof(ZoneDepth)}.{nameof(Mod)}").SetShowsErrorsInUI(false);
         public static Setting CurrentSetting { get; private set; }
         private Setting m_Setting;
 
