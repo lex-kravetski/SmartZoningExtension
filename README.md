@@ -24,6 +24,7 @@ Note: All screenshots were taken with the overlay turned off manually. The mod d
 
 - The preview is hidden while a mouse button is held, so it does not interfere with painting or erasing zones.
 
+
 ### Controls
 
 - **Left-click** a road to disable zoning on the side nearest the cursor.
@@ -37,6 +38,7 @@ Note: All screenshots were taken with the overlay turned off manually. The mod d
 - **Middle-click** a road to rebalance priority among enabled competing sides in favour of the hovered side. The mod temporarily disables those sides, then restores them starting with the side that overlaps the hovered area least and ending with the one that overlaps it most. This gives the hovered side an opportunity to claim more of the shared area. Rebalancing is intended to preserve cells that are already zoned, but it relies on the game's road-side zoning mechanism and may occasionally leave some cells unzoned.
 
 The red preview and Alt-clicks use the same competition check. Middle-click only processes competitors that are enabled when clicked.
+
 
 ## Mod setting
 
