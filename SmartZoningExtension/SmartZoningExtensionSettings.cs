@@ -8,18 +8,18 @@ using System.Collections.Generic;
 
 namespace ZoneDepth
 {
-    [FileLocation(nameof(ZoneDepth))]
-    public class Setting : ModSetting
+    [FileLocation("SmartZoningExtension")]
+    public class SmartZoningExtensionSettings : ModSetting
     {
         public const string kSection = "Main";
 
-        public Setting(IMod mod) : base(mod)
+        public SmartZoningExtensionSettings(IMod mod) : base(mod)
         {
 
         }
 
         [SettingsUISection(kSection)]
-        public bool Enabled { get; set; }
+        public bool Enabled { get; set; } = true;
 
         public override void SetDefaults()
         {
@@ -29,8 +29,8 @@ namespace ZoneDepth
 
     public class LocaleEN : IDictionarySource
     {
-        private readonly Setting m_Setting;
-        public LocaleEN(Setting setting)
+        private readonly SmartZoningExtensionSettings m_Setting;
+        public LocaleEN(SmartZoningExtensionSettings setting)
         {
             m_Setting = setting;
         }
@@ -39,9 +39,9 @@ namespace ZoneDepth
             return new Dictionary<string, string>
             {
                 { m_Setting.GetSettingsLocaleID(), "Smart Zoning Extension" },
-                { m_Setting.GetOptionTabLocaleID(Setting.kSection), "Main" },
-                { m_Setting.GetOptionLabelLocaleID(nameof(Setting.Enabled)), "Enabled" },
-                { m_Setting.GetOptionDescLocaleID(nameof(Setting.Enabled)), "Enable or disable all Smart Zoning Extension features." },
+                { m_Setting.GetOptionTabLocaleID(SmartZoningExtensionSettings.kSection), "Main" },
+                { m_Setting.GetOptionLabelLocaleID(nameof(SmartZoningExtensionSettings.Enabled)), "Enabled" },
+                { m_Setting.GetOptionDescLocaleID(nameof(SmartZoningExtensionSettings.Enabled)), "Enable or disable all Smart Zoning Extension features." },
             };
         }
 

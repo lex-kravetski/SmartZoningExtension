@@ -1,4 +1,4 @@
-using Game;
+﻿using Game;
 using Game.Modding;
 using Game.SceneFlow;
 using Colossal.IO.AssetDatabase;
@@ -7,18 +7,18 @@ namespace ZoneDepth
 {
     public class Mod : IMod
     {
-        public static Setting CurrentSetting { get; private set; }
-        private Setting m_Setting;
+        public static SmartZoningExtensionSettings CurrentSetting { get; private set; }
+        private SmartZoningExtensionSettings m_Setting;
 
         public void OnLoad(UpdateSystem updateSystem)
         {
-            m_Setting = new Setting(this);
+            m_Setting = new SmartZoningExtensionSettings(this);
             CurrentSetting = m_Setting;
             m_Setting.RegisterInOptionsUI();
             GameManager.instance.localizationManager.AddSource("en-US", new LocaleEN(m_Setting));
 
 
-            AssetDatabase.global.LoadSettings(nameof(ZoneDepth), m_Setting, new Setting(this));
+            AssetDatabase.global.LoadSettings("SmartZoningExtension", m_Setting, new SmartZoningExtensionSettings(this));
 
             // The experimental block-replacement pipeline is intentionally not
             // registered while the road-side toggle is being tested.  Recreating
