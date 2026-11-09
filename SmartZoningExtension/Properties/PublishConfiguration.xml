@@ -1,15 +1,56 @@
 ﻿<Publish>
 	<!--Id must be set in order to update existed mod. it is not required for publishing mod for the first time-->
-	<ModId Value="" />
+	<ModId Value="166887" />
 	<!--Name of the mod to display to players-->
 	<DisplayName Value="Smart Zoning Extension" />
 	<!--Short description of the mod-->
 	<ShortDescription Value="Adds road-side zoning controls and tools for resolving competing zoning areas." />
 	<!--Long description of the mod. Single line or multi line. Supports minimal markdown subset-->
-	<!--LongDescription Value="Automatically releases road zoning cells deeper than the last zoned row, allowing other roads to claim that space. Removing zoning lets eligible roads reclaim cells." /-->
+
 	<LongDescription>
-Adds road-side zoning controls, previews competing zoning areas, and lets you rebalance their priority while zoning.
-	</LongDescription>
+# Smart Zoning Extension
+
+The game's **Roads Tool** has a **zoning toggle** for choosing which sides of a road can be zoned while building or upgrading it. Smart Zoning Extension brings this control to the standard **Zones Tool** and adds previews and priority controls for existing roads.
+
+This means you no longer have to switch to the Roads tool or use paths to change zoning on existing roads.
+
+
+## How to use
+
+Select the standard **Zones Tool**, choose a zone type, and hover over a road segment to disable or enable zoning on that segment, as you would when using the road zoning toggle. The side closest to the cursor is the side affected by clicks.
+
+Note: All screenshots were taken with the overlay turned off manually. The mod does not disable the colorful overlays that the game automatically displays when you switch to the **Zones Tool**.
+
+### Preview
+
+- Zoning cells on the hovered side are highlighted.
+
+- Red highlights mark enabled sides of nearby roads whose zoning competes for the hovered area.
+
+- If zoning is disabled on the hovered side, a blue overlay marks that side of the road and previews where zoning will be restored.
+
+- The preview is hidden while a mouse button is held, so it does not interfere with painting or erasing zones.
+
+
+## Controls
+
+- **Left-click** a road to disable zoning on the side nearest the cursor.
+
+- **Right-click** a road to enable zoning on the side nearest the cursor.
+
+- **Alt + left-click** a road to disable zoning on its enabled competitors highlighted in red. The hovered side is left unchanged.
+
+- **Alt + right-click** a road to enable zoning on competing sides, including sides that are currently disabled.
+
+- **Middle-click** a road to rebalance priority among enabled competing sides in favour of the hovered one. The mod temporarily disables those sides, then restores them starting with the side that overlaps the hovered area least and ending with the one that overlaps it most. This gives the hovered side an opportunity to claim more of the shared area. Rebalancing is intended to preserve cells that are already zoned, but it relies on the game's road-side zoning mechanism and may occasionally leave some cells unzoned.
+
+The red preview and Alt-clicks use the same competition check. Middle-click only processes competitors that are enabled when clicked.
+
+
+## Mod settings
+
+In **Options → Mods → Smart Zoning Extension**, the **Enabled** option turns all mod features on or off. It is on by default. Uncheck it to temporarily disable the mod without removing it from your playset.
+</LongDescription>
 	<!--Thumbnail-->
 	<Thumbnail Value="Properties/Thumbnail.png" />
 	<!--Screenshot, can be set multiple times-->
@@ -20,7 +61,7 @@ Adds road-side zoning controls, previews competing zoning areas, and lets you re
 	<!--Tag, can be set multiple times-->
 	<Tag Value="" />
 	<!--Link to the forum post where the mod can be discussed-->
-	<ForumLink Value="" />
+	<ForumLink Value="https://forum.paradoxplaza.com/forum/threads/smart-zoning-extension.1949231/" />
 	<!--Version of the mod-->
 	<ModVersion Value="1.0" />
 	<!--Recommended version of the base game to use the mod-->
@@ -30,7 +71,7 @@ Adds road-side zoning controls, previews competing zoning areas, and lets you re
 	<!--Required DLC, can be set multiple times. Supported values are "Landmark Buildings", "San Fransisco Set", "Beach Properties", "Urban Promenades", "Modern Architecture"-->
 	<RequiredDLC Value="" />
 	<!--Change log for new version. Single line or multi line. Supports minimal markdown subset-->
-	<ChangeLog Value="" />
+	<ChangeLog Value="Updated the mod description and listing information." />
 	<!--<ChangeLog>
 	</ChangeLog>-->
 	<!--External link, can be set multiple times. supported types are "discord", "github", "youtube", "twitch", "x", "paypal", "patreon", "buymeacoffee", "kofi", "crowdin", "gitlab", "gofundme"-->
