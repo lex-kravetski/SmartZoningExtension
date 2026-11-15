@@ -2,11 +2,13 @@
 using Game.Modding;
 using Game.SceneFlow;
 using Colossal.IO.AssetDatabase;
+using Colossal.Logging;
 
 namespace ZoneDepth
 {
     public class Mod : IMod
     {
+        public static ILog Log { get; } = LogManager.GetLogger("SmartZoningExtension").SetShowsErrorsInUI(false);
         public static SmartZoningExtensionSettings CurrentSetting { get; private set; }
         private SmartZoningExtensionSettings m_Setting;
 

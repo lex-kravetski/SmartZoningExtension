@@ -1,6 +1,7 @@
 using System;
 using System.Reflection;
 using System.Collections.Generic;
+using Colossal.Collections;
 using Colossal.Mathematics;
 using Game;
 using Game.Common;
@@ -11,6 +12,7 @@ using Game.Tools;
 using Game.Zones;
 using Unity.Collections;
 using Unity.Entities;
+using Unity.Jobs;
 using Unity.Mathematics;
 using UnityEngine.InputSystem;
 
@@ -43,9 +45,28 @@ namespace ZoneDepth
             public bool Left;
         }
 
+        private struct RoadBoundsIterator : INativeQuadTreeIterator<Entity, QuadTreeBoundsXZ>,
+            IUnsafeQuadTreeIterator<Entity, QuadTreeBoundsXZ>
+        {
+            public Bounds2 Bounds;
+            public NativeList<Entity> Roads;
+
+            public bool Intersect(QuadTreeBoundsXZ treeBounds)
+            {
+                return MathUtils.Intersect(treeBounds.m_Bounds.xz, Bounds);
+            }
+
+            public void Iterate(QuadTreeBoundsXZ roadBounds, Entity road)
+            {
+                if (MathUtils.Intersect(roadBounds.m_Bounds.xz, Bounds))
+                    Roads.Add(road);
+            }
+        }
+
         private ToolSystem m_ToolSystem;
         private ZoneToolSystem m_ZoneToolSystem;
         private ToolOutputBarrier m_OutputBarrier;
+        private Game.Net.SearchSystem m_NetSearchSystem;
         private FieldInfo m_ApplyZoneField;
         private FieldInfo m_RemoveZoneField;
         private MethodInfo m_GetRaycastResult;
@@ -78,6 +99,7 @@ namespace ZoneDepth
             m_ToolSystem = World.GetOrCreateSystemManaged<ToolSystem>();
             m_ZoneToolSystem = World.GetOrCreateSystemManaged<ZoneToolSystem>();
             m_OutputBarrier = World.GetOrCreateSystemManaged<ToolOutputBarrier>();
+            m_NetSearchSystem = World.GetOrCreateSystemManaged<Game.Net.SearchSystem>();
             m_ToolRaycastField = typeof(ZoneToolSystem).GetField("m_ToolRaycastSystem", BindingFlags.Instance | BindingFlags.NonPublic);
             m_ToolRaycastSystem = m_ToolRaycastField?.GetValue(m_ZoneToolSystem) as ToolRaycastSystem;
             m_RoadEdges = GetEntityQuery(new EntityQueryDesc
@@ -384,25 +406,77 @@ namespace ZoneDepth
             if (!entityManager.Exists(sourceRoad) || !entityManager.HasComponent<Curve>(sourceRoad))
                 return matches;
 
-            HashSet<Entity> sourceBlocks = CollectSideBlocks(sourceRoad,
-                entityManager.GetComponentData<Curve>(sourceRoad), sourceLeft);
-            if (sourceBlocks.Count == 0)
-                return matches;
             Curve sourceCurve = entityManager.GetComponentData<Curve>(sourceRoad);
+            HashSet<Entity> sourceBlocks = CollectSideBlocks(sourceRoad,
+                sourceCurve, sourceLeft);
+            GetRoadWidth(sourceRoad, out float roadWidth, out float middleOffset);
+            if (!TryGetPotentialZoneAreas(sourceCurve, sourceLeft, roadWidth, middleOffset,
+                out List<Quad2> potentialAreas))
+            {
+                // Mod.Log.Info($"competition scan skipped: could not build potential source zone source={sourceRoad} side={(sourceLeft ? "left" : "right")}");
+                return matches;
+            }
 
-            NativeArray<Entity> roads = m_RoadEdges.ToEntityArray(Allocator.Temp);
+            const int searchExpansionCells = 13;
+            Bounds2 searchBounds = GetRoadSearchBounds(sourceCurve, roadWidth, middleOffset,
+                searchExpansionCells);
+
+            NativeQuadTree<Entity, QuadTreeBoundsXZ> searchTree =
+                m_NetSearchSystem.GetNetSearchTree(readOnly: true, out JobHandle searchDependencies);
+            searchDependencies.Complete();
+            if (!searchTree.IsCreated)
+            {
+                // Mod.Log.Info("competition scan skipped: net search tree is not ready");
+                return matches;
+            }
+
+            NativeList<Entity> nearbyRoads = new NativeList<Entity>(Allocator.Temp);
+            RoadBoundsIterator roadIterator = new RoadBoundsIterator
+            {
+                Bounds = searchBounds,
+                Roads = nearbyRoads
+            };
+            searchTree.Iterate(ref roadIterator);
+            List<Entity> candidateRoads = new List<Entity>();
+            for (int i = 0; i < nearbyRoads.Length; i++)
+            {
+                Entity candidateRoad = nearbyRoads[i];
+                if (candidateRoad == sourceRoad || !entityManager.Exists(candidateRoad) ||
+                    !entityManager.HasComponent<Curve>(candidateRoad) ||
+                    !entityManager.HasBuffer<SubBlock>(candidateRoad))
+                    continue;
+
+                DynamicBuffer<SubBlock> candidateBlocks = entityManager.GetBuffer<SubBlock>(candidateRoad, true);
+                bool hasBlockOnSourceSide = false;
+                for (int blockIndex = 0; blockIndex < candidateBlocks.Length; blockIndex++)
+                {
+                    Entity blockEntity = candidateBlocks[blockIndex].m_SubBlock;
+                    if (entityManager.Exists(blockEntity) && entityManager.HasComponent<Block>(blockEntity) &&
+                        IsLeftOfRoad(sourceCurve, entityManager.GetComponentData<Block>(blockEntity).m_Position) == sourceLeft)
+                    {
+                        hasBlockOnSourceSide = true;
+                        break;
+                    }
+                }
+
+                if (hasBlockOnSourceSide)
+                    candidateRoads.Add(candidateRoad);
+            }
+            // Mod.Log.Info($"competition candidates={candidateRoads.Count}");
             try
             {
-                for (int i = 0; i < roads.Length; i++)
+                for (int i = 0; i < candidateRoads.Count; i++)
                 {
-                    Entity candidateRoad = roads[i];
-                    if (candidateRoad == sourceRoad || !entityManager.Exists(candidateRoad) ||
-                        !entityManager.HasComponent<Curve>(candidateRoad) ||
-                        !entityManager.HasBuffer<SubBlock>(candidateRoad))
-                        continue;
+                    Entity candidateRoad = candidateRoads[i];
 
                     Curve candidateCurve = entityManager.GetComponentData<Curve>(candidateRoad);
                     DynamicBuffer<SubBlock> candidateBlocks = entityManager.GetBuffer<SubBlock>(candidateRoad, true);
+                    int enabledBlockCount = 0;
+                    int disabledBlockCount = 0;
+                    int sideMismatchPairCount = 0;
+                    int neighborPairCount = 0;
+                    int invalidAreaPairCount = 0;
+                    int nonOverlapPairCount = 0;
                     bool foundCandidate = false;
                     for (int candidateIndex = 0; candidateIndex < candidateBlocks.Length; candidateIndex++)
                     {
@@ -415,41 +489,54 @@ namespace ZoneDepth
                         bool candidateLeft = IsLeftOfRoad(candidateCurve, candidateBlock.m_Position);
                         bool candidateDisabled = IsSideDisabled(candidateRoad, candidateLeft);
                         if (candidateDisabled && !includeDisabled)
+                        {
+                            disabledBlockCount++;
                             continue;
+                        }
+                        enabledBlockCount++;
 
+                        if (IsLeftOfRoad(sourceCurve, candidateBlock.m_Position) != sourceLeft)
+                        {
+                            sideMismatchPairCount++;
+                            continue;
+                        }
+
+                        bool isNeighbor = false;
                         foreach (Entity sourceBlockEntity in sourceBlocks)
                         {
-                            if (!entityManager.Exists(sourceBlockEntity) ||
-                                !entityManager.HasComponent<Block>(sourceBlockEntity))
-                                continue;
+                            if (entityManager.Exists(sourceBlockEntity) &&
+                                entityManager.HasComponent<Block>(sourceBlockEntity) &&
+                                ZoneUtils.IsNeighbor(entityManager.GetComponentData<Block>(sourceBlockEntity), candidateBlock))
+                            {
+                                isNeighbor = true;
+                                break;
+                            }
+                        }
+                        if (isNeighbor)
+                        {
+                            neighborPairCount++;
+                            continue;
+                        }
 
-                            Block sourceBlock = entityManager.GetComponentData<Block>(sourceBlockEntity);
-                            // A polygon overlap across either road does not
-                            // mean the blocks can compete: the road separates
-                            // the two zoning areas. Both blocks must lie on
-                            // the same relevant side of each other's road.
-                            if (IsLeftOfRoad(candidateCurve, sourceBlock.m_Position) != candidateLeft ||
-                                IsLeftOfRoad(sourceCurve, candidateBlock.m_Position) != sourceLeft)
-                                continue;
+                        if (!TryGetCandidateBlockCorners(entityManager, candidateBlockEntity, candidateBlock,
+                            useFullBlock: candidateDisabled, out Quad2 candidateCorners))
+                        {
+                            invalidAreaPairCount++;
+                            continue;
+                        }
 
-                            // The game treats aligned blocks that touch at
-                            // their side edges as neighbors, not as competing
-                            // zoning areas. Exclude this parallel-adjacency
-                            // case before testing rectangular overlap.
-                            if (ZoneUtils.IsNeighbor(sourceBlock, candidateBlock))
-                                continue;
-
-                            if (!BlocksOverlap(entityManager, sourceBlock, candidateBlockEntity, candidateBlock,
-                                useFullCandidateBlock: candidateDisabled, out Quad2 sourceCorners,
-                                out Quad2 candidateCorners))
+                        for (int areaIndex = 0; areaIndex < potentialAreas.Count; areaIndex++)
+                        {
+                            Quad2 sourceCorners = MathUtils.Expand(potentialAreas[areaIndex], -0.01f);
+                            if (!MathUtils.Intersect(sourceCorners, candidateCorners))
                                 continue;
 
                             matches.Add(new CompetitionMatch
                             {
                                 Road = candidateRoad,
                                 Left = candidateLeft,
-                                SourceBlockEntity = sourceBlockEntity,
-                                SourceBlock = sourceBlock,
+                                SourceBlockEntity = Entity.Null,
+                                SourceBlock = default,
                                 CandidateBlockEntity = candidateBlockEntity,
                                 CandidateBlock = candidateBlock,
                                 SourceCorners = sourceCorners,
@@ -457,23 +544,131 @@ namespace ZoneDepth
                                 OverlapArea = GetIntersectionArea(sourceCorners, candidateCorners)
                             });
                             foundCandidate = true;
-                            // Match at most one side per road, exactly as the
-                            // preview shows it. This prevents a click from
-                            // changing an unhighlighted opposite side.
                             break;
                         }
 
                         if (foundCandidate)
                             break;
+                        nonOverlapPairCount++;
+                    }
+
+                    if (foundCandidate)
+                    {
+                        // Mod.Log.Info($"competition candidate={candidateRoad} accepted");
+                    }
+                    else
+                    {
+                        List<string> reasons = new List<string>();
+                        if (enabledBlockCount == 0 && disabledBlockCount > 0)
+                            reasons.Add("disabled_sides");
+                        if (sideMismatchPairCount > 0)
+                            reasons.Add($"wrong_side:{sideMismatchPairCount}");
+                        if (neighborPairCount > 0)
+                            reasons.Add($"neighbor:{neighborPairCount}");
+                        if (invalidAreaPairCount > 0)
+                            reasons.Add($"invalid_area:{invalidAreaPairCount}");
+                        if (nonOverlapPairCount > 0)
+                            reasons.Add($"no_overlap:{nonOverlapPairCount}");
+                        if (reasons.Count == 0)
+                            reasons.Add(candidateBlocks.Length == 0 ? "no_blocks" : "no_eligible_blocks");
+                        // Mod.Log.Info($"competition candidate={candidateRoad} rejected reason={string.Join(",", reasons)}");
                     }
                 }
             }
             finally
             {
-                roads.Dispose();
+                nearbyRoads.Dispose();
             }
 
             return matches;
+        }
+
+        private static bool TryGetPotentialZoneAreas(Curve curve, bool left, float roadWidth,
+            float middleOffset, out List<Quad2> areas)
+        {
+            areas = new List<Quad2>();
+            float approximateLength = 0f;
+            float2 previous = EvaluateCurve(curve, 0f);
+            const int lengthSamples = 32;
+            for (int i = 1; i <= lengthSamples; i++)
+            {
+                float2 point = EvaluateCurve(curve, i / (float)lengthSamples);
+                approximateLength += math.distance(previous, point);
+                previous = point;
+            }
+
+            if (approximateLength <= 0.01f)
+            {
+                return false;
+            }
+
+            int segmentCount = math.clamp((int)math.ceil(approximateLength / ZoneUtils.CELL_SIZE), 1, 512);
+            float sideSign = left ? 1f : -1f;
+            float halfWidth = math.max(1f, roadWidth * 0.5f);
+            float potentialDepth = ZoneUtils.CELL_SIZE * 6f;
+
+            for (int i = 0; i < segmentCount; i++)
+            {
+                float t0 = i / (float)segmentCount;
+                float t1 = (i + 1) / (float)segmentCount;
+                float2 center0 = EvaluateCurve(curve, t0);
+                float2 center1 = EvaluateCurve(curve, t1);
+                float2 tangent0 = math.normalizesafe(EvaluateCurveTangent(curve, t0), center1 - center0);
+                float2 tangent1 = math.normalizesafe(EvaluateCurveTangent(curve, t1), center1 - center0);
+                float2 normal0 = new float2(-tangent0.y, tangent0.x);
+                float2 normal1 = new float2(-tangent1.y, tangent1.x);
+
+                float2 inner0 = center0 + normal0 * (middleOffset + sideSign * halfWidth);
+                float2 inner1 = center1 + normal1 * (middleOffset + sideSign * halfWidth);
+                float2 outer0 = center0 + normal0 * (middleOffset + sideSign * (halfWidth + potentialDepth));
+                float2 outer1 = center1 + normal1 * (middleOffset + sideSign * (halfWidth + potentialDepth));
+                Quad2 area = new Quad2(inner0, inner1, outer1, outer0);
+                areas.Add(area);
+            }
+
+            return true;
+        }
+
+        private static Bounds2 GetRoadSearchBounds(Curve curve, float roadWidth, float middleOffset,
+            int expansionCells)
+        {
+            // The Bezier curve is contained by the convex hull of its control
+            // points, so this AABB safely covers curved road segments too.
+            float2 min = math.min(math.min(curve.m_Bezier.xz.a, curve.m_Bezier.xz.b),
+                math.min(curve.m_Bezier.xz.c, curve.m_Bezier.xz.d));
+            float2 max = math.max(math.max(curve.m_Bezier.xz.a, curve.m_Bezier.xz.b),
+                math.max(curve.m_Bezier.xz.c, curve.m_Bezier.xz.d));
+            float roadExtent = math.max(1f, roadWidth * 0.5f) + math.abs(middleOffset);
+            float expansion = roadExtent + ZoneUtils.CELL_SIZE * expansionCells;
+            return new Bounds2(min - expansion, max + expansion);
+        }
+
+        private static bool TryGetCandidateBlockCorners(EntityManager entityManager, Entity blockEntity,
+            Block block, bool useFullBlock, out Quad2 corners)
+        {
+            if (useFullBlock)
+            {
+                corners = ZoneUtils.CalculateCorners(block);
+            }
+            else
+            {
+                if (!entityManager.HasComponent<ValidArea>(blockEntity))
+                {
+                    corners = default;
+                    return false;
+                }
+
+                ValidArea validArea = entityManager.GetComponentData<ValidArea>(blockEntity);
+                if (validArea.m_Area.y <= validArea.m_Area.x || validArea.m_Area.w <= validArea.m_Area.z)
+                {
+                    corners = default;
+                    return false;
+                }
+                corners = ZoneUtils.CalculateCorners(block, validArea);
+            }
+
+            corners = MathUtils.Expand(corners, -0.01f);
+            return true;
         }
 
         private bool TryGetRoadUnderCursor(out Entity road, out float3 hitPosition,
@@ -944,6 +1139,14 @@ namespace ZoneDepth
                 3f * u * u * t * curve.m_Bezier.xz.b +
                 3f * u * t * t * curve.m_Bezier.xz.c +
                 t * t * t * curve.m_Bezier.xz.d;
+        }
+
+        private static float2 EvaluateCurveTangent(Curve curve, float t)
+        {
+            float u = 1f - t;
+            return 3f * u * u * (curve.m_Bezier.xz.b - curve.m_Bezier.xz.a) +
+                6f * u * t * (curve.m_Bezier.xz.c - curve.m_Bezier.xz.b) +
+                3f * t * t * (curve.m_Bezier.xz.d - curve.m_Bezier.xz.c);
         }
 
         private static CompositionFlags.Side SetZonesDisabled(CompositionFlags.Side side, bool disabled)
