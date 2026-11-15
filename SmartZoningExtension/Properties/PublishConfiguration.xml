@@ -71,7 +71,7 @@ In **Options → Mods → Smart Zoning Extension**, the **Enabled** option turns
 	<!--Required DLC, can be set multiple times. Supported values are "Landmark Buildings", "San Fransisco Set", "Beach Properties", "Urban Promenades", "Modern Architecture"-->
 	<RequiredDLC Value="" />
 	<!--Change log for new version. Single line or multi line. Supports minimal markdown subset-->
-	<ChangeLog Value="Updated the mod description and listing information." />
+	<ChangeLog Value="Significantly improved the performance of competing-road searches. The search now checks only nearby roads, so mod performance is largely independent of the total number of roads built during a game session." />
 	<!--<ChangeLog>
 	</ChangeLog>-->
 	<!--External link, can be set multiple times. supported types are "discord", "github", "youtube", "twitch", "x", "paypal", "patreon", "buymeacoffee", "kofi", "crowdin", "gitlab", "gofundme"-->
